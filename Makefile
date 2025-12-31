@@ -13,6 +13,11 @@ HELM_VERSION ?= 3.18.6
 # Image URL to use all building/pushing image targets
 IMG ?= ghcr.io/kcp-dev/kcp-operator
 
+# Architecture to build for (amd64 or arm64)
+ARCH ?= $(shell go env GOARCH)
+# Target OS for builds (defaults to linux for containers)
+TARGETOS ?= linux
+
 TOOLS_DIR = $(shell pwd)/_tools
 
 # CONTAINER_TOOL defines the container tool to be used for building images.
@@ -104,7 +109,7 @@ clean: ## Remove all built binaries.
 
 .PHONY: build
 build: ## Build manager binary.
-	go build -o _build/manager cmd/main.go
+	GOOS=$(TARGETOS) GOARCH=$(ARCH) go build -o _build/manager cmd/main.go
 
 .PHONY: run
 run: fmt vet ## Run a controller from your host.
@@ -115,11 +120,15 @@ run: fmt vet ## Run a controller from your host.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
 docker-build: ## Build docker image with the manager.
-	$(CONTAINER_TOOL) build -t ${IMG} .
+	$(CONTAINER_TOOL) build --platform $(TARGETOS)/$(ARCH) -t ${IMG} .
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.
 	$(CONTAINER_TOOL) push ${IMG}
+
+.PHONY: docker-buildx
+docker-buildx: ## Build and push docker image for multiple architectures (amd64,arm64).
+	$(CONTAINER_TOOL) buildx build --platform linux/amd64,linux/arm64 -t ${IMG} --push .
 
 .PHONY: build-installer
 build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
@@ -166,7 +175,7 @@ kubectl: $(KUBECTL) ## Download kubectl locally if necessary.
 
 .PHONY: $(KUBECTL)
 $(KUBECTL):
-	@UNCOMPRESSED=true hack/download-tool.sh https://dl.k8s.io/$(KUBECTL_VERSION)/bin/$(shell go env GOOS)/$(shell go env GOARCH)/kubectl kubectl $(KUBECTL_VERSION) kubectl
+	@UNCOMPRESSED=true hack/download-tool.sh https://dl.k8s.io/$(KUBECTL_VERSION)/bin/$(shell go env GOOS)/$(ARCH)/kubectl kubectl $(KUBECTL_VERSION) kubectl
 
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
@@ -180,14 +189,14 @@ golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
 
 .PHONY: $(GOLANGCI_LINT)
 $(GOLANGCI_LINT):
-	@hack/download-tool.sh https://github.com/golangci/golangci-lint/releases/download/v${GOLANGCI_LINT_VERSION}/golangci-lint-${GOLANGCI_LINT_VERSION}-$(shell go env GOOS)-$(shell go env GOARCH).tar.gz golangci-lint $(GOLANGCI_LINT_VERSION)
+	@hack/download-tool.sh https://github.com/golangci/golangci-lint/releases/download/v${GOLANGCI_LINT_VERSION}/golangci-lint-${GOLANGCI_LINT_VERSION}-$(shell go env GOOS)-$(ARCH).tar.gz golangci-lint $(GOLANGCI_LINT_VERSION)
 
 .PHONY: protokol
 protokol: $(PROTOKOL) ## Download protokol locally if necessary.
 
 .PHONY: $(PROTOKOL)
 $(PROTOKOL):
-	@hack/download-tool.sh https://codeberg.org/xrstf/protokol/releases/download/v${PROTOKOL_VERSION}/protokol_${PROTOKOL_VERSION}_$(shell go env GOOS)_$(shell go env GOARCH).tar.gz protokol $(PROTOKOL_VERSION)
+	@hack/download-tool.sh https://codeberg.org/xrstf/protokol/releases/download/v${PROTOKOL_VERSION}/protokol_${PROTOKOL_VERSION}_$(shell go env GOOS)_$(ARCH).tar.gz protokol $(PROTOKOL_VERSION)
 
 .PHONY: reconciler-gen
 reconciler-gen: $(RECONCILER_GEN) ## Download reconciler-gen locally if necessary.
@@ -208,7 +217,7 @@ helm: $(HELM) ## Download Helm locally if necessary.
 
 .PHONY: $(HELM)
 $(HELM):
-	@hack/download-tool.sh https://get.helm.sh/helm-v${HELM_VERSION}-$(shell go env GOOS)-$(shell go env GOARCH).tar.gz helm $(HELM_VERSION)
+	@hack/download-tool.sh https://get.helm.sh/helm-v${HELM_VERSION}-$(shell go env GOOS)-$(ARCH).tar.gz helm $(HELM_VERSION)
 
 ##@ Documentation
 

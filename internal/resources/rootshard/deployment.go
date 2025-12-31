@@ -63,7 +63,6 @@ func getKubeconfigMountPath(certName operatorv1alpha1.Certificate) string {
 }
 
 func DeploymentReconciler(rootShard *operatorv1alpha1.RootShard) reconciling.NamedDeploymentReconcilerFactory {
-
 	return func() (string, reconciling.DeploymentReconciler) {
 		return resources.GetRootShardDeploymentName(rootShard), func(dep *appsv1.Deployment) (*appsv1.Deployment, error) {
 			labels := resources.GetRootShardResourceLabels(rootShard)
