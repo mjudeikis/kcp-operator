@@ -244,15 +244,6 @@ func (r *reconciler) deploymentReconciler() reconciling.NamedDeploymentReconcile
 	}
 }
 
-var defaultArgs = []string{
-	"--secure-port=6443",
-	"--root-kubeconfig=/etc/kcp-front-proxy/kubeconfig/kubeconfig",
-	"--shards-kubeconfig=/etc/kcp-front-proxy/kubeconfig/kubeconfig",
-	"--tls-private-key-file=/etc/kcp-front-proxy/tls/tls.key",
-	"--tls-cert-file=/etc/kcp-front-proxy/tls/tls.crt",
-	"--mapping-file=/etc/kcp-front-proxy/config/path-mapping.yaml",
-}
-
 const peersKubeconfigPath = frontProxyBasepath + "/peers-kubeconfig"
 
 // supportsShardPeers returns whether the front-proxy discovers shards through the Admin
@@ -267,6 +258,13 @@ func supportsShardPeers(version *semver.Version) bool {
 	return constraint.Check(version)
 }
 
+// usesRootKubeconfig returns whether the front-proxy still reads the root shard through
+// --root-kubeconfig. Since kcp 0.34 the flag is deprecated and ignored: shards, the core
+// identities and service accounts are discovered through --shard-peer-kubeconfig.
+func usesRootKubeconfig(version *semver.Version) bool {
+	return !supportsShardPeers(version)
+}
+
 func supportsMountProxy(version *semver.Version) bool {
 	if version == nil {
 		return true
@@ -278,9 +276,19 @@ func supportsMountProxy(version *semver.Version) bool {
 }
 
 func (r *reconciler) getArgs(version *semver.Version) []string {
-	args := defaultArgs
+	args := []string{"--secure-port=6443"}
 
-	args = append(args, fmt.Sprintf("--client-ca-file=%s/client-ca/tls.crt", frontProxyBasepath))
+	if usesRootKubeconfig(version) {
+		args = append(args, "--root-kubeconfig="+frontProxyBasepath+"/kubeconfig/kubeconfig")
+	}
+
+	args = append(args,
+		"--shards-kubeconfig="+frontProxyBasepath+"/kubeconfig/kubeconfig",
+		"--tls-private-key-file="+frontProxyBasepath+"/tls/tls.key",
+		"--tls-cert-file="+frontProxyBasepath+"/tls/tls.crt",
+		"--mapping-file="+frontProxyBasepath+"/config/path-mapping.yaml",
+		fmt.Sprintf("--client-ca-file=%s/client-ca/tls.crt", frontProxyBasepath),
+	)
 
 	if len(r.shardPeers()) > 0 && supportsShardPeers(version) {
 		args = append(args, fmt.Sprintf("--shard-peer-kubeconfig=%s/kubeconfig", peersKubeconfigPath))

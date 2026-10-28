@@ -241,6 +241,20 @@ func supportsMountProxy(version *semver.Version) bool {
 	return constraint.Check(version)
 }
 
+// usesRootShardKubeconfig returns whether the shard still needs --root-shard-kubeconfig-file.
+// Since kcp 0.34 the flag is deprecated and ignored: the identities of the core APIExports
+// come from the cache server instead of the root shard. The root shard client kubeconfig
+// stays mounted, as it also serves as the cache kubeconfig when no cache server is configured.
+func usesRootShardKubeconfig(version *semver.Version) bool {
+	if version == nil {
+		return false
+	}
+
+	constraint, _ := semver.NewConstraint("<0.34.0-0")
+
+	return constraint.Check(version)
+}
+
 func getArgs(shard *deployv1alpha1.CompiledShard, version *semver.Version) []string {
 	// Configure the cache kubeconfig to point either to an explicitly configured cache (maybe on the
 	// shard, maybe on the root shard), or the root shard itself (in case no external cache is configured).
@@ -280,7 +294,6 @@ func getArgs(shard *deployv1alpha1.CompiledShard, version *semver.Version) []str
 		fmt.Sprintf("--external-hostname=%s", shard.Spec.RootShard.Spec.External.Hostname),
 
 		fmt.Sprintf("--cache-kubeconfig=%s/kubeconfig", cacheKubeconfigMount),
-		fmt.Sprintf("--root-shard-kubeconfig-file=%s/kubeconfig", getKubeconfigMountPath(operatorv1alpha1.ClientCertificate)),
 		fmt.Sprintf("--logical-cluster-admin-kubeconfig=%s/kubeconfig", getKubeconfigMountPath(operatorv1alpha1.LogicalClusterAdminCertificate)),
 		fmt.Sprintf("--external-logical-cluster-admin-kubeconfig=%s/kubeconfig", getKubeconfigMountPath(operatorv1alpha1.ExternalLogicalClusterAdminCertificate)),
 
@@ -289,6 +302,10 @@ func getArgs(shard *deployv1alpha1.CompiledShard, version *semver.Version) []str
 		"--root-directory=",
 		"--enable-leader-election=true",
 		"--logging-format=json",
+	}
+
+	if usesRootShardKubeconfig(version) {
+		args = append(args, fmt.Sprintf("--root-shard-kubeconfig-file=%s/kubeconfig", getKubeconfigMountPath(operatorv1alpha1.ClientCertificate)))
 	}
 
 	if supportsMountProxy(version) {

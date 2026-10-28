@@ -17,8 +17,11 @@ limitations under the License.
 package compiledshard
 
 import (
+	"slices"
+	"strings"
 	"testing"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -263,6 +266,29 @@ func TestDeploymentReconciler(t *testing.T) {
 
 			// Validate the result
 			tt.validateDeploy(t, result)
+		})
+	}
+}
+
+func TestGetArgsRootShardKubeconfig(t *testing.T) {
+	const flag = "--root-shard-kubeconfig-file=/etc/kcp/client-kubeconfig/kubeconfig"
+
+	tests := []struct {
+		name     string
+		version  *semver.Version
+		expected bool
+	}{
+		{name: "unknown version assumes a current kcp", version: nil, expected: false},
+		{name: "kcp 0.33 still needs the root shard kubeconfig", version: semver.MustParse("0.33.1"), expected: true},
+		{name: "kcp 0.34 ignores the root shard kubeconfig", version: semver.MustParse("0.34.0"), expected: false},
+		{name: "kcp 0.34 pre-release ignores the root shard kubeconfig", version: semver.MustParse("0.34.0-alpha.1"), expected: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			args := getArgs(compiledShard(operatorv1alpha1.ShardSpec{}), tt.version)
+			assert.Equal(t, tt.expected, slices.Contains(args, flag))
+			assert.True(t, slices.ContainsFunc(args, func(a string) bool { return strings.HasPrefix(a, "--cache-kubeconfig=") }))
 		})
 	}
 }
